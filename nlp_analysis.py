@@ -16,7 +16,7 @@ def _read_json(text):
     start = text.find("{")
     end = text.rfind("}") + 1
     if start == -1:
-        raise ValueError("Invalid JSON from Ollama")
+        raise ValueError("Invalid JSON from LLM")
     return json.loads(text[start:end])
 def ask_llm(messages):
 
@@ -25,7 +25,7 @@ def ask_llm(messages):
     )
 
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model="llama-3.3-70b-versatile",
         messages=messages,
         temperature=0.2,
         response_format={
@@ -40,7 +40,6 @@ def ask_llm(messages):
 def generate_interview_question(
         topic,
         previous_questions,
-        model_name,
         resume_text=""
 ):
 
@@ -142,10 +141,12 @@ def check_rubric(
     point_start = len(answer_units)
     for i,point in enumerate(points):
         score = max(
-            cosine_similarity(answer_embedding, embeddings[point_start + i])
-            for answer_embedding in embeddings[:point_start]
+        cosine_similarity(
+        answer_vector,
+        embeddings[point_start+i]
         )
-
+        for answer_vector in embeddings[:point_start]
+        )
         scores.append(
             round(score,3)
         )
