@@ -3,11 +3,8 @@ from __future__ import annotations
 import json
 import re
 import numpy as np
-
-def _get_ollama_content(response):
-    if isinstance(response, dict):
-        return response["message"]["content"]
-    return response.message.content
+import streamlit as st
+from groq import Groq
 
 def _read_json(text):
     text = (
@@ -21,24 +18,23 @@ def _read_json(text):
     if start == -1:
         raise ValueError("Invalid JSON from Ollama")
     return json.loads(text[start:end])
+def ask_llm(messages):
 
-def ask_ollama(messages, model):
-    try:
-        import ollama
-    except ImportError:
-        raise RuntimeError(
-            "Install ollama using pip install ollama"
-        )
-    response = ollama.chat(
-        model=model,
+    client = Groq(
+        api_key=st.secrets["GROQ_API_KEY"]
+    )
+
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
         messages=messages,
-        format="json",
-        options={
-            "temperature":0.2
+        temperature=0.2,
+        response_format={
+            "type":"json_object"
         }
     )
+
     return _read_json(
-        _get_ollama_content(response)
+        response.choices[0].message.content
     )
 
 def generate_interview_question(
@@ -84,14 +80,13 @@ Good:
 "Transformer fine tuning using HuggingFace"
 "Resume classification pipeline"
 """
-    result = ask_ollama(
+    result = ask_llm(
         [
             {
                 "role":"user",
                 "content":prompt
             }
-        ],
-        model_name
+        ]
     )
     return {
         "question":
@@ -167,11 +162,8 @@ def check_rubric(
 def evaluate_live_answer(
         question_data,
         candidate_answer,
-        ollama_model,
         embedding_model="all-MiniLM-L6-v2"
 ):
-
-
     question = question_data["question"]
     points = [point for point in question_data.get("evaluation_points", []) if str(point).strip()]
     if not points:
@@ -210,7 +202,7 @@ def evaluate_live_answer(
         len(points)
 
     )*10
-    judge = ask_ollama(
+    judge = ask_llm(
 
         [
             {
@@ -253,26 +245,16 @@ zero-based indexes from Expected points.
                 "content":
                 f"""
 Question:
-
 {question}
-
-
 Expected points:
-
 {points}
-
-
 Candidate answer:
-
 {candidate_answer}
 
 """
             }
 
-        ],
-
-        ollama_model
-
+        ]
     )
     try:
         judge_score = float(judge.get("score", 0))
@@ -328,7 +310,7 @@ Candidate answer:
         "method":
         """
 Final score:
-50% Ollama technical evaluation
+50% LLM technical evaluation
 40% rubric coverage (sentence-level semantic matching plus judge-confirmed points)
 10% semantic similarity
 """
