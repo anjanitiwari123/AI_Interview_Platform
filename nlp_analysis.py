@@ -1,64 +1,379 @@
-
 from __future__ import annotations
+
+import json
 import re
 import numpy as np
 
+def _get_ollama_content(response):
+    if isinstance(response, dict):
+        return response["message"]["content"]
+    return response.message.content
 
-def clean_concepts(concept_text):
-    """Parse comma-separated rubric concepts while preserving short multi-word phrases."""
-    return [item.strip().lower() for item in concept_text.split(",") if item.strip()]
+def _read_json(text):
+    text = (
+        text
+        .replace("```json", "")
+        .replace("```", "")
+        .strip()
+    )
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    if start == -1:
+        raise ValueError("Invalid JSON from Ollama")
+    return json.loads(text[start:end])
 
-
-def infer_concepts_from_reference(reference_answer, limit=10):
-    """Create a transparent fallback rubric from frequent meaningful reference-answer terms."""
-    tokens = re.findall(r"[a-zA-Z][a-zA-Z+-]{2,}", reference_answer.lower())
-    ignored = {"this", "that", "with", "from", "have", "into", "using", "their", "they", "which", "about", "also", "when"}
-    unique = []
-    for token in tokens:
-        if token not in ignored and token not in unique:
-            unique.append(token)
-    return unique[:limit]
-
-
-def _cosine_similarity(vector_a, vector_b):
-    denominator = np.linalg.norm(vector_a) * np.linalg.norm(vector_b)
-    return float(np.dot(vector_a, vector_b) / denominator) if denominator else 0.0
-
-
-def evaluate_technical_answer(question, candidate_answer, reference_answer, rubric_concepts="", model_name="all-MiniLM-L6-v2"):
-    """Compare an answer with an explicit reference answer and concept rubric.
-
-    A reference answer is deliberately required: embedding similarity without a
-    target answer would not be a meaningful correctness measure.
-    """
-    if not question.strip() or not candidate_answer.strip() or not reference_answer.strip():
-        raise ValueError("Question, candidate answer, and reference answer are required for technical evaluation.")
+def ask_ollama(messages, model):
     try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError as error:
-        raise RuntimeError("sentence-transformers is not installed. Run: pip install sentence-transformers") from error
+        import ollama
+    except ImportError:
+        raise RuntimeError(
+            "Install ollama using pip install ollama"
+        )
+    response = ollama.chat(
+        model=model,
+        messages=messages,
+        format="json",
+        options={
+            "temperature":0.2
+        }
+    )
+    return _read_json(
+        _get_ollama_content(response)
+    )
 
-    model = SentenceTransformer(model_name)
-    embeddings = model.encode([candidate_answer, reference_answer], normalize_embeddings=True)
-    semantic_similarity = round(max(0.0, _cosine_similarity(embeddings[0], embeddings[1])), 3)
+def generate_interview_question(
+        topic,
+        previous_questions,
+        model_name,
+        resume_text=""
+):
 
-    concepts = clean_concepts(rubric_concepts) or infer_concepts_from_reference(reference_answer)
-    candidate_lower = candidate_answer.lower()
-    covered = [concept for concept in concepts if concept in candidate_lower]
-    missing = [concept for concept in concepts if concept not in candidate_lower]
-    concept_coverage = round(100 * len(covered) / len(concepts), 1) if concepts else 0.0
-    technical_score = round(100 * (0.70 * semantic_similarity + 0.30 * concept_coverage / 100), 1)
-
+    previous = "\n".join(
+        previous_questions
+    )
+    prompt = f"""
+You are a technical interviewer.
+Generate ONE interview question.
+Candidate resume:
+{resume_text[:8000]}
+Topic:
+{topic}
+Previous questions:
+{previous}
+Rules:
+- Question must be based on candidate skills/projects.
+- Do not invent technologies.
+- Create technical evaluation points.
+Return JSON:
+{{
+"question":"",
+"evaluation_points":[
+"technical concept",
+"implementation detail",
+"library/algorithm",
+"project usage"
+],
+"difficulty":"easy/intermediate/hard"
+}}
+Evaluation points must be specific.
+Example:
+Bad:
+"concept understanding"
+Good:
+"BERT contextual embeddings"
+"Transformer fine tuning using HuggingFace"
+"Resume classification pipeline"
+"""
+    result = ask_ollama(
+        [
+            {
+                "role":"user",
+                "content":prompt
+            }
+        ],
+        model_name
+    )
     return {
-        "question": question,
-        "semantic_similarity": semantic_similarity,
-        "concept_coverage": concept_coverage,
-        "covered_concepts": covered,
-        "missing_concepts": missing,
-        "rubric_concepts": concepts,
-        "technical_score": technical_score,
-        "method_note": (
-            "Similarity is cosine similarity between pretrained MiniLM sentence embeddings. "
-            "It supports consistent rubric-based review; it is not ground truth or an autonomous hiring decision."
+        "question":
+        result.get("question",""),
+
+        "evaluation_points":
+        result.get(
+            "evaluation_points",
+            []
         ),
+
+        "difficulty":
+        result.get(
+            "difficulty",
+            "intermediate"
+        )
+
+    }
+
+def load_embedding_model(model_name):
+    import streamlit as st
+    from sentence_transformers import SentenceTransformer
+    @st.cache_resource
+    def load(name):
+        return SentenceTransformer(name)
+    return load(model_name)
+
+def cosine_similarity(a,b):
+    return float(
+        np.dot(a,b)
+        /
+        (
+            np.linalg.norm(a)
+            *
+            np.linalg.norm(b)
+        )
+    )
+
+def check_rubric(
+        answer,
+        points,
+        model_name
+):
+    model = load_embedding_model(
+        model_name
+    )
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+|\n+", answer) if part.strip()]
+    answer_units = [answer, *sentences]
+    embeddings = model.encode([*answer_units, *points], normalize_embeddings=True)
+    covered=[]
+    missing=[]
+    scores=[]
+    point_start = len(answer_units)
+    for i,point in enumerate(points):
+        score = max(
+            cosine_similarity(answer_embedding, embeddings[point_start + i])
+            for answer_embedding in embeddings[:point_start]
+        )
+
+        scores.append(
+            round(score,3)
+        )
+        if score >= 0.30:
+            covered.append(point)
+
+        else:
+            missing.append(point)
+    return (
+        scores,
+        covered,
+        missing
+    )
+def evaluate_live_answer(
+        question_data,
+        candidate_answer,
+        ollama_model,
+        embedding_model="all-MiniLM-L6-v2"
+):
+
+
+    question = question_data["question"]
+    points = [point for point in question_data.get("evaluation_points", []) if str(point).strip()]
+    if not points:
+        raise ValueError("This question has no evaluation points. Generate another question before recording.")
+    if not candidate_answer.strip():
+
+        raise ValueError(
+            "Empty answer"
+        )
+    model = load_embedding_model(
+        embedding_model
+    )
+    vectors = model.encode(
+        [
+            candidate_answer,
+            " ".join(points)
+        ],
+        normalize_embeddings=True
+    )
+
+
+    semantic = cosine_similarity(
+        vectors[0],
+        vectors[1]
+    )
+    semantic_score = max(0.0, min(10.0, (semantic - 0.10) / 0.45 * 10))
+    similarities,covered,missing = check_rubric(
+        candidate_answer,
+        points,
+        embedding_model
+    )
+    coverage = (
+
+        len(covered)
+        /
+        len(points)
+
+    )*10
+    judge = ask_ollama(
+
+        [
+            {
+                "role":"system",
+                "content":
+                """
+You are a senior technical interviewer.
+
+Evaluate answer based on:
+
+1. Technical correctness
+2. Implementation knowledge
+3. Tools/libraries
+4. Project explanation
+
+
+Give partial marks.
+
+Return JSON:
+
+{
+"score":0,
+"feedback":"",
+"covered_point_indexes":[]
+}
+
+Score 0-10.
+
+Score the meaning of the candidate's answer, not exact keyword overlap. A
+technically correct paraphrase or a relevant implementation example deserves
+credit. Only use a low score when the answer is substantially incorrect,
+irrelevant, or missing most expected points. `covered_point_indexes` must use
+zero-based indexes from Expected points.
+"""
+            },
+
+            {
+                "role":"user",
+
+                "content":
+                f"""
+Question:
+
+{question}
+
+
+Expected points:
+
+{points}
+
+
+Candidate answer:
+
+{candidate_answer}
+
+"""
+            }
+
+        ],
+
+        ollama_model
+
+    )
+    try:
+        judge_score = float(judge.get("score", 0))
+    except (TypeError, ValueError):
+        judge_score = 0.0
+    judge_score = max(0.0, min(10.0, judge_score))
+    judge_indexes = judge.get("covered_point_indexes", [])
+    if isinstance(judge_indexes, list):
+        for index in judge_indexes:
+            if isinstance(index, int) and 0 <= index < len(points):
+                point = points[index]
+                if point not in covered:
+                    covered.append(point)
+                if point in missing:
+                    missing.remove(point)
+    coverage = len(covered) / len(points) * 10
+    final_score=round(
+        (
+            judge_score * 0.50
+            + coverage * 0.40
+            + semantic_score * 0.10
+
+        ),
+
+        1
+
+    )
+    return {
+        "question":
+        question,
+        "difficulty": question_data.get("difficulty", "intermediate"),
+        "technical_score":
+        final_score,
+        "llm_score":
+        judge_score,
+        "semantic_similarity":
+        round(
+            semantic,
+            3
+        ),
+
+        "concept_coverage": round(coverage * 10, 1),
+        "covered_points":
+        covered,
+        "missing_points":
+        missing,
+        "feedback":
+        judge.get(
+            "feedback",
+            ""
+        ),
+
+        "method":
+        """
+Final score:
+50% Ollama technical evaluation
+40% rubric coverage (sentence-level semantic matching plus judge-confirmed points)
+10% semantic similarity
+"""
+    }
+
+def evaluate_reference_answer(
+        question,
+        candidate_answer,
+        reference_answer,
+        model_name="all-MiniLM-L6-v2"
+
+):
+    model = load_embedding_model(
+        model_name
+    )
+    vectors=model.encode(
+
+        [
+            candidate_answer,
+            reference_answer
+        ],
+
+        normalize_embeddings=True
+
+    )
+    similarity=cosine_similarity(
+        vectors[0],
+        vectors[1]
+    )
+    score=round(
+        similarity*100,
+        1
+    )
+    return {
+        "question":
+        question,
+        "semantic_similarity":
+        round(
+            similarity,
+            3
+        ),
+        "technical_score":
+        score,
+
+        "feedback":
+        "Score based on semantic similarity with reference answer."
+
     }

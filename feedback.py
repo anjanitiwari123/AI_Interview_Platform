@@ -1,5 +1,40 @@
 
 from __future__ import annotations
+def generate_interview_feedback(question_results):
+    """Create an easy-to-read summary from all completed live answers."""
+    if not question_results:
+        raise ValueError("At least one completed answer is required for feedback.")
+
+    overall_score = round(
+        sum(item["technical_analysis"]["technical_score"] for item in question_results) / len(question_results),
+        1,
+    )
+    strengths = []
+    weak_areas = []
+    for item in question_results:
+        analysis = item["technical_analysis"]
+        if analysis["technical_score"] >= 7:
+            strengths.append(f"{analysis['question']}: {analysis['feedback']}")
+        if analysis["missing_points"]:
+            weak_areas.append(
+                f"{analysis['question']}: revisit {', '.join(analysis['missing_points'][:3])}."
+            )
+
+    if overall_score >= 8:
+        final_feedback = "Strong technical mock-interview performance. Keep giving concise explanations and examples."
+    elif overall_score >= 6:
+        final_feedback = "A solid foundation. Make each answer more complete by addressing every evaluation point."
+    else:
+        final_feedback = "Keep practising core concepts and use a definition, explanation, and example structure."
+
+    return {
+        "overall_technical_score": overall_score,
+        "strengths": strengths or ["No answer reached the current strength threshold yet."],
+        "weak_areas": weak_areas or ["No major rubric gaps were found."],
+        "final_feedback": final_feedback,
+    }
+
+
 def generate_feedback(video_metrics, audio_metrics, nlp_metrics, final_metrics):
 
     strengths = []
@@ -60,34 +95,26 @@ def generate_feedback(video_metrics, audio_metrics, nlp_metrics, final_metrics):
         suggestions.append(
             "Replace filler pauses with a short outline before you begin answering."
         )
-
-
     elif audio_metrics.get("clarity_proxy",0) >= 65:
         strengths.append(
             "Audio energy and consistency are good based on the acoustic proxy."
         )
-
-
     if video_metrics.get("face_presence",0) >= 85:
         strengths.append(
             "The face remained visible for most sampled frames."
         )
-
     else:
         weak_areas.append(
             "Face visibility was inconsistent in the sampled video frames."
         )
-
         suggestions.append(
             "Place the camera at eye level and use stable front lighting."
         )
     if video_metrics.get("eye_contact_score",0) < 55:
-
         suggestions.append(
             "Keep the camera near your notes and periodically look toward the lens."
         )
     if video_metrics.get("head_stability",0) < 55:
-
         suggestions.append(
             "Use a stable seated position; natural movement is fine, but avoid frequent large shifts."
         )
@@ -95,7 +122,6 @@ def generate_feedback(video_metrics, audio_metrics, nlp_metrics, final_metrics):
         suggestions.append(
             "Keep practising with varied questions and compare each answer against a clear concept rubric."
         )
-
     return {
         "overall_summary":
             f"{final_metrics.get('performance_band','Unknown')} performance: "

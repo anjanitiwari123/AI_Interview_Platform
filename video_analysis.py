@@ -1,5 +1,4 @@
 
-
 from __future__ import annotations
 import math
 import cv2
@@ -13,16 +12,13 @@ RIGHT_IRIS = [473, 474, 475, 476, 477]
 LEFT_EYE_CORNERS = (33, 133)
 RIGHT_EYE_CORNERS = (362, 263)
 
-
 def _mean_point(landmarks, indices, width, height):
     x = sum(landmarks[index].x for index in indices) / len(indices) * width
     y = sum(landmarks[index].y for index in indices) / len(indices) * height
     return x, y
 
-
 def _distance(point_a, point_b):
     return math.dist(point_a, point_b)
-
 
 def _eye_centering_score(landmarks, width, height):
     try:
@@ -33,7 +29,6 @@ def _eye_centering_score(landmarks, width, height):
             corner_b = (landmarks[corners[1]].x * width, landmarks[corners[1]].y * height)
             eye_width = max(_distance(corner_a, corner_b), 1.0)
             eye_center = ((corner_a[0] + corner_b[0]) / 2, (corner_a[1] + corner_b[1]) / 2)
-            # A displacement of ~25% of eye width maps to zero.
             scores.append(max(0.0, 1 - _distance(iris, eye_center) / (0.25 * eye_width)))
         return sum(scores) / len(scores) * 100
     except (IndexError, ZeroDivisionError):
@@ -112,7 +107,6 @@ def analyze_video(video_path, sample_every_seconds=0.5, max_samples=300):
     face_presence = round(face_frames / sampled_frames * 100, 1)
     eye_contact_score = round(sum(eye_scores) / len(eye_scores), 1) if eye_scores else 0.0
     head_stability = _head_motion(nose_points, face_widths)
-    # Weighted average prioritizes face availability: other metrics are invalid without it.
     visual_score = round(0.45 * face_presence + 0.35 * eye_contact_score + 0.20 * head_stability, 1)
 
     return {

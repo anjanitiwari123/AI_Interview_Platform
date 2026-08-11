@@ -1,15 +1,7 @@
-"""Small, explainable weighted score fusion."""
+
 
 from __future__ import annotations
-
-
 def combine_scores(technical_score, communication_score, visual_score):
-    """Fuse modality scores using fixed weights chosen for explainability.
-
-    Technical answer quality receives the highest weight because this is a
-    technical interview. Communication aids answer delivery; observable visual
-    engagement has the lowest weight to avoid overemphasising camera setup.
-    """
     overall_score = round(
         0.50 * float(technical_score) + 0.30 * float(communication_score) + 0.20 * float(visual_score), 1
     )

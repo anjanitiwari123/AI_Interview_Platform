@@ -1,10 +1,23 @@
-"""JSON and simple PDF report generation without a database."""
 
 from __future__ import annotations
-
 import json
 from datetime import datetime
 from pathlib import Path
+
+
+def build_interview_report(topic, question_results, feedback, resume_name=""):
+    """Create one report for a complete multi-question live interview."""
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "interview_topic": topic,
+        "resume_filename": resume_name or None,
+        "overall_technical_score": feedback["overall_technical_score"],
+        "question_wise_results": question_results,
+        "strengths": feedback["strengths"],
+        "weak_areas": feedback["weak_areas"],
+        "final_feedback": feedback["final_feedback"],
+        "ethical_note": "This educational project provides practice feedback only. Do not use it as an automated hiring decision tool.",
+    }
 
 
 def build_report(question, video_metrics, audio_metrics, nlp_metrics, final_metrics, feedback):
@@ -68,27 +81,57 @@ def save_pdf_report(report_data, output_directory):
         return current_y
 
     pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(42, y, "Multimodal Interview Evaluation Report")
+    pdf.drawString(42, y, "AI Interview Practice Report")
     y -= 28
     pdf.setFont("Helvetica", 10)
-    y = _write_wrapped_line(pdf, f"Question: {report_data['question']}", 42, y)
-    y -= 8
+    if "question_wise_results" in report_data:
+        y = _write_wrapped_line(pdf, f"Topic: {report_data['interview_topic']}", 42, y)
+        if report_data.get("resume_filename"):
+            y = _write_wrapped_line(pdf, f"Resume used: {report_data['resume_filename']}", 42, y)
+        y = _write_wrapped_line(
+            pdf,
+            f"Overall technical score: {report_data['overall_technical_score']}/10",
+            42,
+            y,
+        )
+        y -= 8
+        sections = []
+        for index, item in enumerate(report_data["question_wise_results"], start=1):
+            analysis = item["technical_analysis"]
+            sections.append((
+                f"Question {index}: {analysis['question']}",
+                [
+                    f"Score: {analysis['technical_score']}/10 | Difficulty: {analysis['difficulty']}",
+                    f"Covered: {', '.join(analysis['covered_points']) or 'None'}",
+                    f"Missing: {', '.join(analysis['missing_points']) or 'None'}",
+                    f"Feedback: {analysis['feedback']}",
+                ],
+            ))
+        sections.extend([
+            ("Strengths", report_data["strengths"]),
+            ("Weak areas", report_data["weak_areas"]),
+            ("Final feedback", [report_data["final_feedback"]]),
+            ("Ethical note", [report_data["ethical_note"]]),
+        ])
+    else:
+        y = _write_wrapped_line(pdf, f"Question: {report_data['question']}", 42, y)
+        y -= 8
 
-    sections = [
-        ("Scores", [
-            f"Overall: {report_data['final_score']['overall_score']}/100 ({report_data['final_score']['performance_band']})",
-            f"Technical: {report_data['technical_analysis']['technical_score']}/100 | Communication: {report_data['audio_analysis']['communication_score']}/100 | Visual: {report_data['visual_analysis']['visual_score']}/100",
-        ]),
-        ("Key metrics", [
-            f"Face presence: {report_data['visual_analysis']['face_presence']}% | Iris-centering proxy: {report_data['visual_analysis']['eye_contact_score']}% | Head stability: {report_data['visual_analysis']['head_stability']}%",
-            f"Duration: {report_data['audio_analysis']['duration_seconds']}s | Rate: {report_data['audio_analysis']['words_per_minute']} WPM | Pauses: {report_data['audio_analysis']['pause_count']}",
-            f"Semantic similarity: {report_data['technical_analysis']['semantic_similarity']} | Concept coverage: {report_data['technical_analysis']['concept_coverage']}%",
-        ]),
-        ("Strengths", report_data["feedback"]["strengths"]),
-        ("Areas to improve", report_data["feedback"]["weak_areas"]),
-        ("Suggestions", report_data["feedback"]["suggestions"]),
-        ("Ethical note", [report_data["ethical_note"]]),
-    ]
+        sections = [
+            ("Scores", [
+                f"Overall: {report_data['final_score']['overall_score']}/100 ({report_data['final_score']['performance_band']})",
+                f"Technical: {report_data['technical_analysis']['technical_score']}/100 | Communication: {report_data['audio_analysis']['communication_score']}/100 | Visual: {report_data['visual_analysis']['visual_score']}/100",
+            ]),
+            ("Key metrics", [
+                f"Face presence: {report_data['visual_analysis']['face_presence']}% | Iris-centering proxy: {report_data['visual_analysis']['eye_contact_score']}% | Head stability: {report_data['visual_analysis']['head_stability']}%",
+                f"Duration: {report_data['audio_analysis']['duration_seconds']}s | Rate: {report_data['audio_analysis']['words_per_minute']} WPM | Pauses: {report_data['audio_analysis']['pause_count']}",
+                f"Semantic similarity: {report_data['technical_analysis']['semantic_similarity']} | Concept coverage: {report_data['technical_analysis']['concept_coverage']}%",
+            ]),
+            ("Strengths", report_data["feedback"]["strengths"]),
+            ("Areas to improve", report_data["feedback"]["weak_areas"]),
+            ("Suggestions", report_data["feedback"]["suggestions"]),
+            ("Ethical note", [report_data["ethical_note"]]),
+        ]
     for heading, lines in sections:
         y = new_page_if_needed(y)
         pdf.setFont("Helvetica-Bold", 12)
