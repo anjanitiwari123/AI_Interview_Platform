@@ -900,7 +900,7 @@ def main():
 
     camera_context = webrtc_streamer(
         key="interview-camera-test",
-        mode=WebRtcMode.SENDONLY,
+        mode=WebRtcMode.SENDRECV,
         rtc_configuration=RTC_CONFIGURATION,
         media_stream_constraints={
             "video": True,
