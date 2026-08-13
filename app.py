@@ -874,22 +874,20 @@ def main():
 
 
     RTC_CONFIGURATION = {
-        
-        "iceServers": [
-            
-            {"urls": ["stun:stun.l.google.com:19302"]},
-            {"urls": ["stun:stun1.l.google.com:19302"]},
-        ]
+    "iceServers": [
+        {
+            "urls": [
+                "stun:stun.l.google.com:19302"
+            ]
+        }
+    ]
     }
 
     camera_context = webrtc_streamer(
 
         key=f"interview-camera-{st.session_state.interview_id}",
-
-        mode=WebRtcMode.SENDRECV,
-
+        mode=WebRtcMode.SENDONLY,
         rtc_configuration=RTC_CONFIGURATION,
-
         media_stream_constraints={
 
             "video": True,
