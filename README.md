@@ -2,6 +2,14 @@
 
 A beginner-friendly Streamlit mock-interview app. The candidate opens a browser camera and microphone, answers live questions, and receives technical practice feedback. It is an educational coaching tool, not an automated hiring or ranking system.
 
+
+## 🚀 Live Demo
+
+🔗 **Streamlit App:**  
+https://aiinterviewplatform-at22.streamlit.app/
+
+---
+
 ## Live interview flow
 
 ```text
