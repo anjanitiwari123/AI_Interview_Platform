@@ -873,12 +873,22 @@ def main():
         return
 
 
+    RTC_CONFIGURATION = {
+        
+        "iceServers": [
+            
+            {"urls": ["stun:stun.l.google.com:19302"]},
+            {"urls": ["stun:stun1.l.google.com:19302"]},
+        ]
+    }
 
     camera_context = webrtc_streamer(
 
         key=f"interview-camera-{st.session_state.interview_id}",
 
         mode=WebRtcMode.SENDRECV,
+
+        rtc_configuration=RTC_CONFIGURATION,
 
         media_stream_constraints={
 
@@ -892,12 +902,12 @@ def main():
 
         media_toggle_controls=True
 
-    )
+        )
 
 
     if not camera_context.state.playing:
-
         st.caption(
+            
             "Start camera permission."
         )
 
