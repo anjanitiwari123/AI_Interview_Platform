@@ -904,9 +904,6 @@ def main():
             "audio": False
 
         },
-
-        async_processing=True,
-
         media_toggle_controls=True
 
         )
