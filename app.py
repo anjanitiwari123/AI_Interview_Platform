@@ -876,38 +876,21 @@ def main():
     RTC_CONFIGURATION = {
     "iceServers": [
         {
-            "urls": [
-                "stun:stun.l.google.com:19302"
-            ]
-        },
-        {
-            "urls": [
-                "turn:openrelay.metered.ca:80",
-                "turn:openrelay.metered.ca:443",
-                "turn:openrelay.metered.ca:443?transport=tcp"
-            ],
-            "username": "openrelayproject",
-            "credential": "openrelayproject"
+            "urls": "stun:stun.l.google.com:19302"
         }
     ]
     }
 
-    camera_context = webrtc_streamer(
 
-        key=f"interview-camera-{st.session_state.interview_id}",
+    camera_context = webrtc_streamer(
+        key="interview-camera-test",
         mode=WebRtcMode.SENDONLY,
         rtc_configuration=RTC_CONFIGURATION,
         media_stream_constraints={
-
-            "video": True,
-
-            "audio": False
-
-        },
-        media_toggle_controls=True
-
-        )
-
+        "video": True,
+        "audio": False
+    }
+    )
 
     if not camera_context.state.playing:
         st.caption(
