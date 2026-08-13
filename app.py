@@ -873,29 +873,49 @@ def main():
         return
 
 
+    # STUN + TURN servers. TURN is required because Streamlit Cloud's
+    # network sits behind a NAT/firewall that plain STUN often cannot
+    # traverse, so without TURN the camera permission prompt appears
+    # but the connection never actually completes.
     RTC_CONFIGURATION = {
-    "iceServers": [
-        {
-            "urls": "stun:stun.l.google.com:19302"
-        }
-    ]
+        "iceServers": [
+            {"urls": "stun:stun.relay.metered.ca:80"},
+            {
+                "urls": "turn:global.relay.metered.ca:80",
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+            {
+                "urls": "turn:global.relay.metered.ca:443",
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+            {
+                "urls": "turn:global.relay.metered.ca:443?transport=tcp",
+                "username": "openrelayproject",
+                "credential": "openrelayproject",
+            },
+        ]
     }
-
 
     camera_context = webrtc_streamer(
         key="interview-camera-test",
         mode=WebRtcMode.SENDONLY,
         rtc_configuration=RTC_CONFIGURATION,
         media_stream_constraints={
-        "video": True,
-        "audio": False
-    }
+            "video": True,
+            "audio": False
+        }
     )
+
+    # Debug line: shows the raw WebRTC connection state (e.g. SIGNALLING,
+    # PLAYING, STOPPED). Remove this once the camera connects reliably.
+    st.caption(f"WebRTC state: {camera_context.state}")
 
     if not camera_context.state.playing:
         st.caption(
-            
-            "Start camera permission."
+            "Waiting for camera connection — allow camera permission "
+            "in your browser if you haven't already."
         )
 
 
