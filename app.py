@@ -569,5 +569,4 @@ def main():
             if "pending_transcript" in st.session_state:
                 show_pending_review()
 if __name__ == "__main__":
-
     main()
